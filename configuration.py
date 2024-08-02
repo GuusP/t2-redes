@@ -7,6 +7,7 @@ def get_next_machine_address(id: int, machine_address) -> int:
         return machine_address[0]
     else:
         return machine_address[id + 1]
+    
         
 def get_all_addresses(config_file_path):
     with open(config_file_path) as config_file:
@@ -27,6 +28,7 @@ def receive_message(sock: socket):
     data, address = sock.recvfrom(4096)
     data = json.loads(data.decode('utf-8'))
     data["destination"] = tuple(data["destination"])
+    data["source"] = tuple(data["source"])
     return data, address
 
 

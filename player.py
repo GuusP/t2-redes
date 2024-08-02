@@ -14,6 +14,7 @@ class Player:
         self.socket = socket
         self.next_player_address = next_player_address
         self.deck = []
+        self.dealer = False
 
 def generate_deck():
     cards = [3, 2, 1, 13, 12, 11, 7, 6, 5, 4]
@@ -23,13 +24,24 @@ def generate_deck():
         
     return player_card
 
-def interpret_message(message, player: Player):
+def interpret_message(message, player: Player, all_addresses: list):
     message_type = message["type"]
     
     match message_type:
         case "RECEIVE_CARD":
             player.deck = message["data"]
-            print("Player({}): {}".format(player.id, player.deck))
+            if player.address == message["destination"]:
+                print("Player({}): {}".format(player.id, player.deck))
+            if player.dealer:
+                print("Voltou pro papi")
+                next_machine_address = get_next_machine_address(all_addresses.index(message["destination"]), all_addresses)
+                if next_machine_address == player.address:
+                    return "SEND_CARD", player.next_player_address
+                else:
+                    return "RECEIVE_CARD", next_machine_address
+                
+            
+    return None, player.next_player_address
             
 
 def generate_message(source, destination, data, message_type, delivered):
@@ -44,47 +56,49 @@ def generate_message(source, destination, data, message_type, delivered):
 
 
 def main():
-    carteador = False
     config_file_path = "./config.json"
 
     all_addresses = get_all_addresses(config_file_path)
 
     id = int(sys.argv[1])
+    print(id)
     player = Player(id, all_addresses[id], create_socket(all_addresses[id]), 
                     get_next_machine_address(id, all_addresses))
 
     first = True
     if player.id == 0:
-        carteador = True
+        player.dealer = True
         
     next_message_type = None
     while True:
         # Proxima mensagem/Proxima maquina
-        if carteador and first:
-            next_message_type = "RECEIVE_CARD"
+        if player.dealer and first:
             message = generate_message(player.address, player.next_player_address, generate_deck(),
-                                    "RECEIVE_CARD", False)
-            
+                                            "RECEIVE_CARD", False)
+                    
             sent = send_message(message, player.next_player_address, player.socket)
+            
             first = False
-        
-        
             
         data, address = receive_message(player.socket)
         if data:
-            print("Source: {}".format(data["source"]))
-            if tuple(data['destination']) == player.address:
-                interpret_message(data, player)
-                send_message(data, player.next_player_address, player.socket)
-                    # manda pro próximo
-            elif tuple(data["source"]) == player.address:
-                print("Voltou pro papi")
-                    # Interpreta
-                        # Tira a mensagem
-                            # Nova mensagem
-            else:
-                print("Nao eh pra mim")
-                if not carteador: send_message(data, player.next_player_address, player.socket)
+            next_message_type, next_destination = interpret_message(data, player, all_addresses)
+            match next_message_type:
+                case "RECEIVE_CARD":
+                    message = generate_message(player.address, next_destination, generate_deck(),
+                                            "RECEIVE_CARD", False)
+                    
+                    sent = send_message(message, player.next_player_address, player.socket)
+                    first = False
+                
+                case "SEND_CARD":
+                    print("Vamos enviar")
+                
+                case _:
+                    print("Nao eh pra mim")
+                    sent = send_message(data, player.next_player_address, player.socket)
+                
+        
             
 if __name__ == "__main__":
     main()   
