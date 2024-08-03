@@ -173,6 +173,7 @@ def interpret_message(message, player: Player, game_info: dict):
 def main():
     config_file_path = "./config.json"
     addresses = get_all_addresses(config_file_path)
+    #TODO: passar as infos para o config.json
     game_info = {
         "all_addresses": addresses,
         "player_lives": [12, 12, 12, 12],
