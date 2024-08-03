@@ -27,8 +27,7 @@ def send_message(message, destination_address, sock: socket):
 def receive_message(sock: socket):
     data, address = sock.recvfrom(4096)
     data = json.loads(data.decode('utf-8'))
-    data["destination"] = tuple(data["destination"])
-    data["source"] = tuple(data["source"])
+    
     return data, address
 
 
