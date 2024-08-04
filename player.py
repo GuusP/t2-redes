@@ -12,6 +12,8 @@ class MessageType(Enum):
     SEND_BET = 3
     UPDATE_LIFE = 4
     UPDATE_POINTS = 5
+    UPDATE_GAME_INFO = 6
+    SEND_BAT = 7
 
 
 class Player:
@@ -60,7 +62,7 @@ def interpret_receive_card(message, player: Player, all_addresses: list, game_in
         print("Voltou pro papi")
         next_machine_address = get_next_machine_address(all_addresses.index(converted_message["destination"]), all_addresses)
         if next_machine_address == player.address:
-            return send_bet(player)
+            return send_bet(player, game_info)
         else:
             return send_receive_card(player, next_machine_address, game_info)
 
@@ -83,15 +85,15 @@ def send_to_next(player, message):
 
 
  
-def send_bet(player):
-    message = generate_message(player.address, None, [], MessageType.SEND_BET, False)
+def send_bet(player, game_info):
+    message = generate_message(player.address, None, game_info["players_bets"], MessageType.SEND_BET, False)
     send_to_next(player, message)
     
 def interpret_send_bet(player: Player, message, game_info):
     if player.dealer == False:
         print("Suas cartas: {}".format(player.deck))
         bet = int(input("Quantas rodadas você irá fazer?"))
-        message["data"].append(bet)
+        message["data"][player.id] = bet
         send_to_next(player, message)
     else:
         game_info["players_bets"] = message["data"]
@@ -130,6 +132,8 @@ def interpret_send_card(player: Player, message, game_info):
         game_info["rounds_won"][biggest_card_position] += 1
         game_info["rounds_played"] += 1
         
+        
+        
         send_update_points(player, game_info)
         
 def send_update_points(player: Player, game_info):
@@ -139,18 +143,56 @@ def send_update_points(player: Player, game_info):
     send_to_next(player, message)
     
 def interpret_update_points(player: Player, message, game_info):
+    
     if player.dealer == False:
         game_info["rounds_won"] = message["data"]
-        print("Rounds ganhos nessa rodada: {}".format(game_info["rounds_won"]))
         send_to_next(player, message)
-        return
-    
-    if game_info["rounds_played"] == game_info["rounds_to_play"]:
-        print("Acabou a rodada") # Atualizar vida, passar para o próximo carteador
     else:
-        send_card(player)
+        if game_info["rounds_played"] == game_info["rounds_to_play"]:
+            print("Acabou a rodada") # Atualizar vida, passar para o próximo carteador
+            for i in range(len(game_info["player_lives"])):
+                if i != player.id:
+                    game_info["player_lives"][i] -= abs(game_info["players_bets"][i] - game_info["rounds_won"][i])
+                    
+            reset_rounds(game_info)
+            send_update_game_info(player, game_info)
+        else:
+            send_card(player)
+            
+    print("Rounds ganhos nessa rodada: {}".format(game_info["rounds_won"]))
     
-
+def send_update_game_info(player, game_info):
+    message = generate_message(player.address, None, game_info, MessageType.UPDATE_GAME_INFO,
+                               False)
+    
+    send_to_next(player, message)
+    
+def interpret_updade_game_info(player: Player, game_info, message):
+    if player.dealer == False:
+        game_info["player_lives"] = message["data"]["player_lives"]
+        game_info["rounds_won"] = message["data"]["rounds_won"]
+        game_info["rounds_played"] =  message["data"]["rounds_played"]
+        print("Começando uma nova rodada")
+        print("Vidas: {}".format(game_info["player_lives"]))
+        send_to_next(player, message)
+    else:
+        player.dealer = False
+        send_bat(player) # recomeça aqui
+        
+def send_bat(player: Player):
+    message = generate_message(player.address, player.next_player_address, None, MessageType.SEND_BAT,
+                               False)
+    
+    send_to_next(player, message)
+    
+def interpret_send_bat(player: Player, message, game_info):
+    destination = tuple(message["destination"])
+    
+    if player.address == destination:
+        player.dealer = True
+        game_info["first"] = True
+    else:
+        send_to_next(player, message)
 
 def interpret_message(message, player: Player, game_info: dict):
     message_type = MessageType[message["type"]]
@@ -166,9 +208,20 @@ def interpret_message(message, player: Player, game_info: dict):
         
         case MessageType.UPDATE_POINTS:
             return interpret_update_points(player, message, game_info)
+        
+        case MessageType.UPDATE_GAME_INFO:
+            return interpret_updade_game_info(player, game_info, message)
+        
+        case MessageType.SEND_BAT:
+            return interpret_send_bat(player, message, game_info)
 
 
-
+def reset_rounds(game_info):
+    for i in range(len(game_info["rounds_won"])):
+        game_info["rounds_won"][i] = 0
+        
+    game_info["rounds_played"] = 0
+        
 
 def main():
     config_file_path = "./config.json"
@@ -176,31 +229,31 @@ def main():
     #TODO: passar as infos para o config.json
     game_info = {
         "all_addresses": addresses,
-        "player_lives": [12, 12, 12, 12],
+        "player_lives": [12] * len(addresses),
         "players_bets": [0] * len(addresses),
         "rounds_won": [0] * len(addresses),
         "rounds_played": 0,
-        "rounds_to_play": 3
+        "rounds_to_play": 3,
+        "first": True
     }
     id = int(sys.argv[1])
     print(id)
     player = Player(id, game_info["all_addresses"][id], create_socket(game_info["all_addresses"][id]),
                     get_next_machine_address(id, game_info["all_addresses"]))
 
-    first = True
     if player.id == 0:
         player.dealer = True
 
     next_message_type = None
     while True:
         # Proxima mensagem/Proxima maquina
-        if player.dealer and first:
+        if player.dealer and game_info["first"]:
             message = generate_message(player.address, player.next_player_address, generate_deck(game_info),
                                        MessageType.RECEIVE_CARD, False)
 
             send_message(message, player.next_player_address, player.socket)
 
-            first = False
+            game_info["first"] = False
 
         data, address = receive_message(player.socket)
         if data:
