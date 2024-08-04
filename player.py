@@ -1,3 +1,15 @@
+'''TODO:
+    - Arrumar prints
+    - Encerrar quando acabar a vida
+        - tirar a pessoa quando acaba a vida
+    - comentarios
+    - mover infos pro json
+    - adicionar naipes
+    - limitar qnt da aposta
+    - diminuir a qntd de cartas a cada round
+    
+'''
+
 import socket
 import random
 import sys
