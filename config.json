@@ -1,3 +1,6 @@
 {
-  "player_ports": [12345, 12346, 12347, 12348]
+  "ip": "localhost",
+  "player_ports": [12345, 12346, 12347, 12348],
+  "player_lives": 2,
+  "rounds_to_play": 3
 }
