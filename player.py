@@ -1,8 +1,3 @@
-'''TODO:
-    - comentarioss
-    
-'''
-
 import socket
 import random
 import sys
